@@ -3,23 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Обозреватель файлов</title>
+  <title>Обозреватель NIKON</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
     body {
-      margin: 0;
-      padding: 30px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #f5f5f7;
       color: #1d1d1f;
+      margin: 0;
+      padding: 30px;
     }
 
-    .app {
+    main {
       max-width: 900px;
       margin: auto;
     }
@@ -28,61 +23,57 @@
       margin-bottom: 5px;
     }
 
-    .subtitle {
+    .hint {
       color: #666;
       margin-bottom: 25px;
     }
 
-    button {
-      border: 0;
-      border-radius: 12px;
-      padding: 13px 20px;
-      font-size: 16px;
-      cursor: pointer;
+    .button {
+      display: inline-block;
       background: #007aff;
       color: white;
+      padding: 13px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 16px;
     }
 
-    button:hover {
+    .button:hover {
       opacity: 0.85;
+    }
+
+    #folderInput {
+      display: none;
     }
 
     #status {
       margin: 20px 0;
-      padding: 12px 15px;
-      border-radius: 10px;
       background: white;
+      padding: 15px;
+      border-radius: 12px;
     }
 
     #files {
       background: white;
-      border-radius: 15px;
       padding: 20px;
-      box-shadow: 0 3px 15px rgba(0,0,0,0.08);
+      border-radius: 15px;
+      box-shadow: 0 3px 15px #0001;
     }
 
     .folder {
-      margin: 7px 0;
       font-weight: 600;
+      margin-top: 8px;
     }
 
     .file {
-      margin: 6px 0;
-      padding: 5px 0;
-    }
-
-    .indent {
-      margin-left: 25px;
+      margin: 5px 0;
+      padding-left: 20px;
     }
 
     .size {
       color: #888;
       font-size: 13px;
       margin-left: 8px;
-    }
-
-    .error {
-      color: #c00;
     }
 
     .empty {
@@ -93,20 +84,27 @@
 
 <body>
 
-<div class="app">
+<main>
 
-  <h1>📂 Файловый обозреватель</h1>
+  <h1>📂 Обозреватель файлов</h1>
 
-  <div class="subtitle">
-    Выбери флешку или папку — программа только читает её содержимое.
+  <div class="hint">
+    Выбери папку или накопитель NIKON.
+    Сайт ничего не записывает на него.
   </div>
 
-  <button id="chooseButton">
-    📁 Выбрать папку / флешку
-  </button>
+  <label class="button">
+    📁 Выбрать NIKON
+    <input
+      id="folderInput"
+      type="file"
+      webkitdirectory
+      multiple
+    >
+  </label>
 
   <div id="status">
-    Ничего не выбрано.
+    Накопитель не выбран.
   </div>
 
   <div id="files">
@@ -115,245 +113,90 @@
     </div>
   </div>
 
-</div>
+</main>
 
 <script>
-  const chooseButton = document.getElementById("chooseButton");
-  const status = document.getElementById("status");
-  const filesContainer = document.getElementById("files");
 
+const input = document.getElementById("folderInput");
+const status = document.getElementById("status");
+const files = document.getElementById("files");
 
-  chooseButton.addEventListener("click", async () => {
+input.addEventListener("change", () => {
 
-    // Проверяем поддержку API
-    if (!("showDirectoryPicker" in window)) {
-      status.innerHTML =
-        '<span class="error">' +
-        "Этот браузер не поддерживает выбор папки. " +
-        "Попробуй Chrome или Edge." +
-        "</span>";
+  const selectedFiles = Array.from(input.files);
 
-      return;
-    }
-
-    try {
-
-      // Открываем системное окно выбора папки.
-      // Никакого writable-доступа здесь НЕ запрашиваем.
-      const directoryHandle =
-        await window.showDirectoryPicker({
-          mode: "read"
-        });
-
-      status.textContent =
-        "📂 Выбрано: " + directoryHandle.name;
-
-      filesContainer.innerHTML = "";
-
-      await displayDirectory(
-        directoryHandle,
-        filesContainer
-      );
-
-    } catch (error) {
-
-      console.error(error);
-
-      if (error.name === "AbortError") {
-
-        status.textContent =
-          "Выбор отменён.";
-
-        return;
-      }
-
-      status.innerHTML =
-        '<span class="error">' +
-        "Ошибка: " +
-        escapeHTML(error.message) +
-        "</span>";
-    }
-  });
-
-
-  async function displayDirectory(
-    directoryHandle,
-    container
-  ) {
-
-    const entries = [];
-
-    try {
-
-      for await (
-        const entry of directoryHandle.values()
-      ) {
-        entries.push(entry);
-      }
-
-    } catch (error) {
-
-      const errorElement =
-        document.createElement("div");
-
-      errorElement.className = "error";
-
-      errorElement.textContent =
-        "Не удалось прочитать содержимое: " +
-        error.message;
-
-      container.appendChild(errorElement);
-
-      return;
-    }
-
-
-    // Папки сначала, затем файлы.
-    entries.sort((a, b) => {
-
-      if (a.kind !== b.kind) {
-        return a.kind === "directory" ? -1 : 1;
-      }
-
-      return a.name.localeCompare(
-        b.name,
-        undefined,
-        {
-          numeric: true,
-          sensitivity: "base"
-        }
-      );
-    });
-
-
-    if (entries.length === 0) {
-
-      const empty =
-        document.createElement("div");
-
-      empty.className = "empty";
-
-      empty.textContent =
-        "Папка пустая.";
-
-      container.appendChild(empty);
-
-      return;
-    }
-
-
-    for (const entry of entries) {
-
-      if (entry.kind === "directory") {
-
-        const folder =
-          document.createElement("div");
-
-        folder.className = "folder";
-
-        folder.textContent =
-          "📁 " + entry.name;
-
-        container.appendChild(folder);
-
-
-        const inside =
-          document.createElement("div");
-
-        inside.className = "indent";
-
-        container.appendChild(inside);
-
-
-        await displayDirectory(
-          entry,
-          inside
-        );
-
-      } else {
-
-        const file =
-          document.createElement("div");
-
-        file.className = "file";
-
-        file.textContent =
-          "📄 " + entry.name;
-
-        try {
-
-          // Только чтение файла.
-          const fileObject =
-            await entry.getFile();
-
-          const size =
-            document.createElement("span");
-
-          size.className = "size";
-
-          size.textContent =
-            formatSize(fileObject.size);
-
-          file.appendChild(size);
-
-        } catch (error) {
-
-          const warning =
-            document.createElement("span");
-
-          warning.className = "size";
-
-          warning.textContent =
-            "(размер недоступен)";
-
-          file.appendChild(warning);
-        }
-
-        container.appendChild(file);
-      }
-    }
+  if (selectedFiles.length === 0) {
+    status.textContent = "Ничего не выбрано.";
+    return;
   }
 
+  files.innerHTML = "";
 
-  function formatSize(bytes) {
+  const firstPath =
+    selectedFiles[0].webkitRelativePath;
 
-    if (bytes < 1024) {
-      return bytes + " Б";
-    }
+  const rootName =
+    firstPath.split("/")[0];
 
-    if (bytes < 1024 * 1024) {
-      return (
-        (bytes / 1024).toFixed(1) +
-        " КБ"
-      );
-    }
+  status.textContent =
+    "📂 " +
+    rootName +
+    " — найдено файлов: " +
+    selectedFiles.length;
 
-    if (bytes < 1024 * 1024 * 1024) {
-      return (
-        (bytes / 1024 / 1024).toFixed(1) +
-        " МБ"
-      );
-    }
+  selectedFiles.sort((a, b) =>
+    a.webkitRelativePath.localeCompare(
+      b.webkitRelativePath,
+      undefined,
+      {
+        numeric: true,
+        sensitivity: "base"
+      }
+    )
+  );
 
-    return (
-      (bytes / 1024 / 1024 / 1024).toFixed(1) +
-      " ГБ"
-    );
+  for (const file of selectedFiles) {
+
+    const row =
+      document.createElement("div");
+
+    row.className = "file";
+
+    row.textContent =
+      "📄 " +
+      file.webkitRelativePath;
+
+    const size =
+      document.createElement("span");
+
+    size.className = "size";
+
+    size.textContent =
+      formatSize(file.size);
+
+    row.appendChild(size);
+
+    files.appendChild(row);
   }
 
+});
 
-  function escapeHTML(text) {
 
-    return String(text)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+function formatSize(bytes) {
+
+  if (bytes < 1024)
+    return bytes + " Б";
+
+  if (bytes < 1024 * 1024)
+    return (bytes / 1024).toFixed(1) + " КБ";
+
+  if (bytes < 1024 * 1024 * 1024)
+    return (bytes / 1024 / 1024).toFixed(1) + " МБ";
+
+  return (bytes / 1024 / 1024 / 1024).toFixed(1) + " ГБ";
+}
 
 </script>
 
 </body>
 </html>
-
