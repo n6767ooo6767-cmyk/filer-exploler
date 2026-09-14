@@ -3,61 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Файловый обозреватель</title>
+
+  <title>Обозреватель файлов</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: system-ui, sans-serif;
-      max-width: 900px;
-      margin: 0 auto;
+      margin: 0;
       padding: 30px;
-      background: #f5f5f5;
-      color: #222;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+    }
+
+    .app {
+      max-width: 900px;
+      margin: auto;
     }
 
     h1 {
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
 
-    .hint {
+    .subtitle {
       color: #666;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
     }
 
     button {
-      padding: 12px 18px;
       border: 0;
-      border-radius: 10px;
-      background: #222;
-      color: white;
+      border-radius: 12px;
+      padding: 13px 20px;
       font-size: 16px;
       cursor: pointer;
+      background: #007aff;
+      color: white;
     }
 
     button:hover {
-      background: #444;
+      opacity: 0.85;
     }
 
     #status {
       margin: 20px 0;
-      font-weight: 600;
+      padding: 12px 15px;
+      border-radius: 10px;
+      background: white;
     }
 
     #files {
       background: white;
-      border-radius: 14px;
+      border-radius: 15px;
       padding: 20px;
-      box-shadow: 0 4px 20px #0001;
+      box-shadow: 0 3px 15px rgba(0,0,0,0.08);
     }
 
     .folder {
-      font-weight: bold;
-      margin-top: 8px;
+      margin: 7px 0;
+      font-weight: 600;
     }
 
     .file {
-      margin: 5px 0;
-      padding: 4px 0;
+      margin: 6px 0;
+      padding: 5px 0;
     }
 
     .indent {
@@ -71,135 +82,278 @@
     }
 
     .error {
-      color: #b00020;
+      color: #c00;
+    }
+
+    .empty {
+      color: #777;
     }
   </style>
 </head>
 
 <body>
 
+<div class="app">
+
   <h1>📂 Файловый обозреватель</h1>
 
-  <div class="hint">
-    Выбери папку, например флешку <b>NIKON</b>.
-    Сайт покажет её содержимое.
+  <div class="subtitle">
+    Выбери флешку или папку — программа только читает её содержимое.
   </div>
 
-  <button id="choose">Выбрать папку</button>
+  <button id="chooseButton">
+    📁 Выбрать папку / флешку
+  </button>
 
-  <div id="status"></div>
+  <div id="status">
+    Ничего не выбрано.
+  </div>
 
   <div id="files">
-    Пока ничего не выбрано.
+    <div class="empty">
+      Здесь появятся файлы.
+    </div>
   </div>
 
-  <script>
-    const chooseButton = document.getElementById("choose");
-    const status = document.getElementById("status");
-    const filesDiv = document.getElementById("files");
+</div>
 
-    chooseButton.addEventListener("click", async () => {
-      try {
-        const directoryHandle = await window.showDirectoryPicker();
+<script>
+  const chooseButton = document.getElementById("chooseButton");
+  const status = document.getElementById("status");
+  const filesContainer = document.getElementById("files");
 
-        status.textContent = "📂 Папка: " + directoryHandle.name;
-        filesDiv.innerHTML = "";
 
-        await readDirectory(directoryHandle, filesDiv);
+  chooseButton.addEventListener("click", async () => {
 
-      } catch (error) {
-        if (error.name === "AbortError") {
-          status.textContent = "Выбор отменён.";
-        } else {
-          console.error(error);
-          status.innerHTML =
-            '<span class="error">Ошибка: ' +
-            escapeHTML(error.message) +
-            "</span>";
-        }
+    // Проверяем поддержку API
+    if (!("showDirectoryPicker" in window)) {
+      status.innerHTML =
+        '<span class="error">' +
+        "Этот браузер не поддерживает выбор папки. " +
+        "Попробуй Chrome или Edge." +
+        "</span>";
+
+      return;
+    }
+
+    try {
+
+      // Открываем системное окно выбора папки.
+      // Никакого writable-доступа здесь НЕ запрашиваем.
+      const directoryHandle =
+        await window.showDirectoryPicker({
+          mode: "read"
+        });
+
+      status.textContent =
+        "📂 Выбрано: " + directoryHandle.name;
+
+      filesContainer.innerHTML = "";
+
+      await displayDirectory(
+        directoryHandle,
+        filesContainer
+      );
+
+    } catch (error) {
+
+      console.error(error);
+
+      if (error.name === "AbortError") {
+
+        status.textContent =
+          "Выбор отменён.";
+
+        return;
       }
-    });
 
-    async function readDirectory(directoryHandle, container) {
+      status.innerHTML =
+        '<span class="error">' +
+        "Ошибка: " +
+        escapeHTML(error.message) +
+        "</span>";
+    }
+  });
 
-      const entries = [];
 
-      for await (const entry of directoryHandle.values()) {
+  async function displayDirectory(
+    directoryHandle,
+    container
+  ) {
+
+    const entries = [];
+
+    try {
+
+      for await (
+        const entry of directoryHandle.values()
+      ) {
         entries.push(entry);
       }
 
-      entries.sort((a, b) => {
-        if (a.kind !== b.kind) {
-          return a.kind === "directory" ? -1 : 1;
-        }
+    } catch (error) {
 
-        return a.name.localeCompare(b.name, undefined, {
+      const errorElement =
+        document.createElement("div");
+
+      errorElement.className = "error";
+
+      errorElement.textContent =
+        "Не удалось прочитать содержимое: " +
+        error.message;
+
+      container.appendChild(errorElement);
+
+      return;
+    }
+
+
+    // Папки сначала, затем файлы.
+    entries.sort((a, b) => {
+
+      if (a.kind !== b.kind) {
+        return a.kind === "directory" ? -1 : 1;
+      }
+
+      return a.name.localeCompare(
+        b.name,
+        undefined,
+        {
           numeric: true,
           sensitivity: "base"
-        });
-      });
-
-      for (const entry of entries) {
-
-        if (entry.kind === "directory") {
-
-          const folder = document.createElement("div");
-          folder.className = "folder";
-
-          folder.textContent = "📁 " + entry.name;
-
-          container.appendChild(folder);
-
-          const inside = document.createElement("div");
-          inside.className = "indent";
-
-          container.appendChild(inside);
-
-          await readDirectory(entry, inside);
-
-        } else {
-
-          const file = document.createElement("div");
-          file.className = "file";
-
-          let sizeText = "";
-
-          try {
-            const fileObject = await entry.getFile();
-            sizeText = formatSize(fileObject.size);
-          } catch {}
-
-          file.innerHTML =
-            "📄 " +
-            escapeHTML(entry.name) +
-            '<span class="size">' +
-            sizeText +
-            "</span>";
-
-          container.appendChild(file);
         }
+      );
+    });
+
+
+    if (entries.length === 0) {
+
+      const empty =
+        document.createElement("div");
+
+      empty.className = "empty";
+
+      empty.textContent =
+        "Папка пустая.";
+
+      container.appendChild(empty);
+
+      return;
+    }
+
+
+    for (const entry of entries) {
+
+      if (entry.kind === "directory") {
+
+        const folder =
+          document.createElement("div");
+
+        folder.className = "folder";
+
+        folder.textContent =
+          "📁 " + entry.name;
+
+        container.appendChild(folder);
+
+
+        const inside =
+          document.createElement("div");
+
+        inside.className = "indent";
+
+        container.appendChild(inside);
+
+
+        await displayDirectory(
+          entry,
+          inside
+        );
+
+      } else {
+
+        const file =
+          document.createElement("div");
+
+        file.className = "file";
+
+        file.textContent =
+          "📄 " + entry.name;
+
+        try {
+
+          // Только чтение файла.
+          const fileObject =
+            await entry.getFile();
+
+          const size =
+            document.createElement("span");
+
+          size.className = "size";
+
+          size.textContent =
+            formatSize(fileObject.size);
+
+          file.appendChild(size);
+
+        } catch (error) {
+
+          const warning =
+            document.createElement("span");
+
+          warning.className = "size";
+
+          warning.textContent =
+            "(размер недоступен)";
+
+          file.appendChild(warning);
+        }
+
+        container.appendChild(file);
       }
     }
+  }
 
-    function formatSize(bytes) {
-      if (bytes < 1024) return bytes + " Б";
-      if (bytes < 1024 * 1024)
-        return (bytes / 1024).toFixed(1) + " КБ";
-      if (bytes < 1024 * 1024 * 1024)
-        return (bytes / 1024 / 1024).toFixed(1) + " МБ";
 
-      return (bytes / 1024 / 1024 / 1024).toFixed(1) + " ГБ";
+  function formatSize(bytes) {
+
+    if (bytes < 1024) {
+      return bytes + " Б";
     }
 
-    function escapeHTML(text) {
-      return text
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    if (bytes < 1024 * 1024) {
+      return (
+        (bytes / 1024).toFixed(1) +
+        " КБ"
+      );
     }
-  </script>
+
+    if (bytes < 1024 * 1024 * 1024) {
+      return (
+        (bytes / 1024 / 1024).toFixed(1) +
+        " МБ"
+      );
+    }
+
+    return (
+      (bytes / 1024 / 1024 / 1024).toFixed(1) +
+      " ГБ"
+    );
+  }
+
+
+  function escapeHTML(text) {
+
+    return String(text)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+</script>
 
 </body>
 </html>
+
